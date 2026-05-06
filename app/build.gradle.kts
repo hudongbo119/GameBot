@@ -14,6 +14,11 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // 同时支持真机 (arm64-v8a) 和模拟器 (x86_64)
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+        }
     }
 
     buildTypes {
@@ -39,6 +44,10 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // 避免多个依赖带同名 .so 时冲突
+        jniLibs {
+            pickFirsts += listOf("**/libopencv_java4.so")
+        }
     }
 }
 
@@ -48,8 +57,8 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
-    // OpenCV
-    implementation("com.quickbirdstudios:opencv:4.5.3.0")
+    // OpenCV 官方 Maven 包，包含 arm64-v8a / armeabi-v7a / x86 / x86_64，真机和模拟器都支持
+    implementation("org.opencv:opencv:4.9.0")
 
     // ML Kit Text Recognition
     implementation("com.google.mlkit:text-recognition:16.0.1")
