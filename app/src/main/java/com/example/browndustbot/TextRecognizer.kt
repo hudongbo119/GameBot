@@ -84,6 +84,27 @@ class GameTextRecognizer {
         }
     }
 
+    fun findTextFromBlocks(
+        blocks: List<TextBlock>,
+        targetText: String,
+        matchMode: TextMatchMode = TextMatchMode.CONTAINS
+    ): TextMatchResult {
+        val matches = blocks.filter { block -> matchesText(block.text, targetText, matchMode) }
+        return if (matches.isNotEmpty()) {
+            val best = matches.first()
+            TextMatchResult(
+                found = true,
+                matchedText = best.text,
+                centerX = best.centerX,
+                centerY = best.centerY,
+                boundingBox = best.boundingBox,
+                allMatches = matches
+            )
+        } else {
+            TextMatchResult(found = false, allMatches = emptyList())
+        }
+    }
+
     suspend fun findText(
         bitmap: Bitmap,
         targetText: String,

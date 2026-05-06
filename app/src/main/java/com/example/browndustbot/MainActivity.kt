@@ -9,7 +9,9 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.DisplayMetrics
+import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.ActivityResult
@@ -19,6 +21,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.opencv.android.OpenCVLoader
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -29,6 +35,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnLoadConfig: Button
     private lateinit var btnStartTask: Button
     private lateinit var btnStopTask: Button
+    private lateinit var btnRefreshConfigs: Button
+    private lateinit var spinnerConfig: Spinner
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
 
@@ -39,6 +47,8 @@ class MainActivity : AppCompatActivity() {
     private var currentTaskConfig: TaskConfig? = null
     private val logBuilder = StringBuilder()
 
+    private val configFiles = mutableListOf<File>()
+
     companion object {
         private const val REQUEST_NOTIFICATION_PERMISSION = 1002
     }
@@ -48,7 +58,6 @@ class MainActivity : AppCompatActivity() {
     ) { _: ActivityResult ->
         if (Settings.canDrawOverlays(this)) {
             toast("悬浮窗权限已授权")
-            startFloatingWindowService()
         } else {
             toast("悬浮窗权限被拒绝")
         }
@@ -74,6 +83,15 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         initComponents()
         setupButtons()
+
+        if (!OpenCVLoader.initLocal()) {
+            appendLog("OpenCV 初始化失败！图像匹配将不可用")
+            toast("OpenCV 初始化失败，图像匹配不可用")
+        } else {
+            appendLog("OpenCV 初始化成功")
+        }
+
+        scanConfigFiles()
         requestNotificationPermission()
     }
 
@@ -84,6 +102,8 @@ class MainActivity : AppCompatActivity() {
         btnLoadConfig = findViewById(R.id.btnLoadConfig)
         btnStartTask = findViewById(R.id.btnStartTask)
         btnStopTask = findViewById(R.id.btnStopTask)
+        btnRefreshConfigs = findViewById(R.id.btnRefreshConfigs)
+        spinnerConfig = findViewById(R.id.spinnerConfig)
         tvStatus = findViewById(R.id.tvStatus)
         tvLog = findViewById(R.id.tvLog)
     }
@@ -122,6 +142,10 @@ class MainActivity : AppCompatActivity() {
             screenCaptureManager.requestPermissionForResult(screenCaptureLauncher)
         }
 
+        btnRefreshConfigs.setOnClickListener {
+            scanConfigFiles()
+        }
+
         btnLoadConfig.setOnClickListener {
             loadTaskConfig()
         }
@@ -136,26 +160,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun scanConfigFiles() {
+        val dir = getExternalFilesDir(null) ?: return
+        lifecycleScope.launch {
+            val files = withContext(Dispatchers.IO) {
+                (dir.listFiles { f -> f.extension == "json" } ?: emptyArray()).toList()
+            }
+            configFiles.clear()
+            configFiles.addAll(files)
+
+            if (configFiles.isEmpty()) {
+                appendLog("请将配置文件放入：${dir.absolutePath}")
+                val adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, listOf("（无配置文件）"))
+                adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                spinnerConfig.adapter = adapter
+                spinnerConfig.isEnabled = false
+                btnLoadConfig.isEnabled = false
+                return@launch
+            }
+
+            val displayNames = withContext(Dispatchers.IO) {
+                configFiles.map { file ->
+                    try {
+                        val config = Gson().fromJson(file.readText(), TaskConfig::class.java)
+                        config?.name?.takeIf { it.isNotBlank() } ?: file.name
+                    } catch (e: Exception) {
+                        file.name
+                    }
+                }
+            }
+
+            val adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, displayNames)
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            spinnerConfig.adapter = adapter
+            spinnerConfig.isEnabled = true
+            btnLoadConfig.isEnabled = true
+            appendLog("已找到 ${configFiles.size} 个配置文件")
+        }
+    }
+
     private fun loadTaskConfig() {
-        val configFile = File(getExternalFilesDir(null), "task_config.json")
-        if (!configFile.exists()) {
-            val sampleConfig = TaskConfig(
-                name = "示例任务",
-                targetPackage = "com.example.game",
-                steps = listOf(
-                    TaskStep(
-                        name = "等待3秒",
-                        action = ActionType.WAIT,
-                        waitTimeoutMs = 3000
-                    )
-                ),
-                loopCount = 1,
-                loopDelayMs = 1000
-            )
-            configFile.writeText(Gson().toJson(sampleConfig))
-            appendLog("已创建示例配置: ${configFile.absolutePath}")
+        if (configFiles.isEmpty()) {
+            val dir = getExternalFilesDir(null)
+            appendLog("没有找到配置文件，请将配置文件放入：${dir?.absolutePath}")
+            toast("没有找到配置文件")
+            return
         }
 
+        val selectedIndex = spinnerConfig.selectedItemPosition
+        if (selectedIndex < 0 || selectedIndex >= configFiles.size) {
+            toast("请先选择配置文件")
+            return
+        }
+
+        val configFile = configFiles[selectedIndex]
         try {
             val json = configFile.readText()
             currentTaskConfig = Gson().fromJson(json, TaskConfig::class.java)
@@ -225,11 +283,6 @@ class MainActivity : AppCompatActivity() {
             windowManager.defaultDisplay.getMetrics(metrics)
         }
         return metrics
-    }
-
-    private fun startFloatingWindowService() {
-        val intent = Intent(this, FloatingWindowService::class.java)
-        startForegroundService(intent)
     }
 
     private fun updateStatus(status: String) {

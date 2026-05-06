@@ -20,6 +20,8 @@ class ScreenCaptureManager(private val context: Context) {
     companion object {
         private const val TAG = "ScreenCaptureManager"
         private const val VIRTUAL_DISPLAY_NAME = "BrownDustCapture"
+        private const val DEFAULT_RETRY_COUNT = 5
+        private const val DEFAULT_RETRY_DELAY_MS = 200L
     }
 
     private var mediaProjection: MediaProjection? = null
@@ -91,6 +93,16 @@ class ScreenCaptureManager(private val context: Context) {
 
     suspend fun captureScreenAsync(): Bitmap? = withContext(Dispatchers.IO) {
         captureScreen()
+    }
+
+    suspend fun captureScreenWithRetry(maxRetries: Int = DEFAULT_RETRY_COUNT, delayMs: Long = DEFAULT_RETRY_DELAY_MS): Bitmap? {
+        repeat(maxRetries) { attempt ->
+            val bitmap = captureScreenAsync()
+            if (bitmap != null) return bitmap
+            Log.w(TAG, "截屏重试第${attempt + 1}次失败")
+            kotlinx.coroutines.delay(delayMs)
+        }
+        return null
     }
 
     fun release() {
