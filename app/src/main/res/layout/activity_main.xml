@@ -85,6 +85,26 @@
                     android:textStyle="bold"
                     android:layout_marginBottom="8dp" />
 
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="选择游戏脚本："
+                    android:textSize="14sp"
+                    android:layout_marginBottom="4dp" />
+
+                <Spinner
+                    android:id="@+id/spinnerConfig"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp" />
+
+                <Button
+                    android:id="@+id/btnRefreshConfigs"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="刷新列表"
+                    android:layout_marginBottom="4dp" />
+
                 <Button
                     android:id="@+id/btnLoadConfig"
                     android:layout_width="match_parent"

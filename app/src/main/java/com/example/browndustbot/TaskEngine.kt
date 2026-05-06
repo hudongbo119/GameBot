@@ -20,6 +20,7 @@ class TaskEngine(
 
     companion object {
         private const val TAG = "TaskEngine"
+        private const val TEXT_PREVIEW_BLOCK_COUNT = 5
         var instance: TaskEngine? = null
             private set
     }
@@ -111,9 +112,9 @@ class TaskEngine(
         log("执行步骤: ${step.name}")
         delay(step.preDelayMs)
 
-        val screenshot = screenCaptureManager.captureScreenAsync()
+        val screenshot = screenCaptureManager.captureScreenWithRetry()
         if (screenshot == null) {
-            log("截屏失败，跳过步骤: ${step.name}")
+            log("截屏失败（多次重试后仍失败），跳过步骤: ${step.name}")
             return
         }
 
@@ -209,6 +210,7 @@ class TaskEngine(
         val templateBitmap = BitmapFactory.decodeFile(templatePath) ?: return Triple(false, 0, 0)
         return try {
             val result = imageMatcher.findTemplate(screenshot, templateBitmap, step.imageThreshold)
+            log("图像匹配 [${step.name}]: confidence=${result.confidence}, found=${result.found}")
             if (result.found) Triple(true, result.centerX, result.centerY)
             else Triple(false, 0, 0)
         } finally {
@@ -218,24 +220,34 @@ class TaskEngine(
 
     private suspend fun findByText(step: TaskStep, screenshot: Bitmap): Triple<Boolean, Int, Int> {
         val config = step.textConfig ?: return Triple(false, 0, 0)
-        val result = if (config.searchRegion != null) {
-            textRecognizer.findTextInRegion(
-                screenshot,
-                config.targetText,
-                config.searchRegion.toRect(),
-                config.matchMode,
-                config.useChinese
-            )
+        val searchRegion = config.searchRegion?.toRect()
+
+        val (allBlocks, offsetX, offsetY) = if (searchRegion != null) {
+            val left = searchRegion.left.coerceIn(0, screenshot.width)
+            val top = searchRegion.top.coerceIn(0, screenshot.height)
+            val right = searchRegion.right.coerceIn(0, screenshot.width)
+            val bottom = searchRegion.bottom.coerceIn(0, screenshot.height)
+            val croppedBitmap = try {
+                Bitmap.createBitmap(screenshot, left, top, right - left, bottom - top)
+            } catch (e: Exception) { null }
+            if (croppedBitmap != null) {
+                val blocks = textRecognizer.recognizeAll(croppedBitmap, config.useChinese)
+                croppedBitmap.recycle()
+                Triple(blocks, left, top)
+            } else {
+                Triple(emptyList(), 0, 0)
+            }
         } else {
-            textRecognizer.findText(
-                screenshot,
-                config.targetText,
-                config.matchMode,
-                config.useChinese
-            )
+            Triple(textRecognizer.recognizeAll(screenshot, config.useChinese), 0, 0)
         }
+
+        val preview = allBlocks.take(TEXT_PREVIEW_BLOCK_COUNT).map { it.text }
+        log("文字识别 [${step.name}]: 识别到文字=$preview")
+
+        val result = textRecognizer.findTextFromBlocks(allBlocks, config.targetText, config.matchMode)
+
         return if (result.found && config.clickOnText) {
-            Triple(true, result.centerX, result.centerY)
+            Triple(true, result.centerX + offsetX, result.centerY + offsetY)
         } else if (result.found) {
             Triple(true, 0, 0)
         } else {
