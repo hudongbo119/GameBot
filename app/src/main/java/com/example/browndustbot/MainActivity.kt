@@ -24,7 +24,6 @@ import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.opencv.android.OpenCVLoader
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -84,14 +83,8 @@ class MainActivity : AppCompatActivity() {
         initComponents()
         setupButtons()
 
-        // OpenCV 初始化（使用 initDebug，适配 com.quickbirdstudios:opencv）
-        @Suppress("DEPRECATION")
-        if (!OpenCVLoader.initDebug()) {
-            appendLog("OpenCV 初始化失败！图像匹配将不可用")
-            toast("OpenCV 初始化失败，图像匹配不可用")
-        } else {
-            appendLog("OpenCV 初始化成功")
-        }
+        // com.quickbirdstudios:opencv 已将原生库内嵌于 AAR，无需手动初始化，直接使用即可
+        appendLog("组件初始化完成")
 
         scanConfigFiles()
         requestNotificationPermission()
@@ -173,7 +166,11 @@ class MainActivity : AppCompatActivity() {
 
             if (configFiles.isEmpty()) {
                 appendLog("请将配置文件放入：${dir.absolutePath}")
-                val adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, listOf("（无配置文件）"))
+                val adapter = ArrayAdapter(
+                    this@MainActivity,
+                    android.R.layout.simple_spinner_item,
+                    listOf("（无配置文件）")
+                )
                 adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
                 spinnerConfig.adapter = adapter
                 spinnerConfig.isEnabled = false
@@ -192,7 +189,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            val adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, displayNames)
+            val adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                displayNames
+            )
             adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             spinnerConfig.adapter = adapter
             spinnerConfig.isEnabled = true
