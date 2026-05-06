@@ -84,7 +84,9 @@ class MainActivity : AppCompatActivity() {
         initComponents()
         setupButtons()
 
-        if (!OpenCVLoader.initLocal()) {
+        // OpenCV 初始化（使用 initDebug，适配 com.quickbirdstudios:opencv）
+        @Suppress("DEPRECATION")
+        if (!OpenCVLoader.initDebug()) {
             appendLog("OpenCV 初始化失败！图像匹配将不可用")
             toast("OpenCV 初始化失败，图像匹配不可用")
         } else {
